@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 func random_number_within_range(min, max int) int {
@@ -28,6 +29,12 @@ func generateRandomString() string {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("URL shortner failed due to ", r)
+			os.Exit(1)
+		}
+	}()
 	fmt.Println("URL Shortener Service")
 
 	u, err := url.Parse("https://www.example.com/path/to/resource?param1=value1&param2=value2#fragment")
@@ -52,12 +59,13 @@ func main() {
 		Host:   "localhost:8000",
 		Path:   get_random_string,
 	}
-	fmt.Println(construct_new_url.String())
 	http.HandleFunc("/"+get_random_string, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 	})
+	fmt.Println(construct_new_url.String())
 
 	if err := http.ListenAndServe(":8000", nil); err != nil {
 		panic(err)
 	}
+
 }
