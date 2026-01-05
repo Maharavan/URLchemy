@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand/v2"
+	"net/http"
 	"net/url"
 )
 
@@ -51,10 +52,12 @@ func main() {
 		Host:   "localhost:8000",
 		Path:   get_random_string,
 	}
-
 	fmt.Println(construct_new_url.String())
+	http.HandleFunc("/"+get_random_string, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
+	})
 
-
-	
-
+	if err := http.ListenAndServe(":8000", nil); err != nil {
+		panic(err)
+	}
 }
