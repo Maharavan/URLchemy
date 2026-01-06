@@ -2,11 +2,17 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/joho/godotenv"
 )
+
+var defaultScheme string = "http"
+var defaultHost string = "localhost:8000"
 
 func random_number_within_range(min, max int) int {
 	return min + rand.IntN(max-min+1)
@@ -28,7 +34,23 @@ func generateRandomString() string {
 
 }
 
+func getHostNameandScheme() (string, string) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error while loading .env file")
+	}
+	if hostname := os.Getenv("APP_HOST_NAME"); hostname != "" {
+		defaultHost = hostname
+	}
+	if scheme := os.Getenv("APP_SCHEME"); scheme != "" {
+		defaultScheme = scheme
+	}
+
+	return defaultHost, defaultScheme
+}
+
 func main() {
+
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("URL shortner failed due to ", r)
@@ -51,16 +73,16 @@ func main() {
 	fmt.Println("Fragment: ", u.Fragment)
 
 	get_random_string := generateRandomString()
-
+	host, scheme := getHostNameandScheme()
 	fmt.Println(get_random_string)
 
 	construct_new_url := url.URL{
-		Scheme: "http",
-		Host:   "localhost:8000",
+		Scheme: host,
+		Host:   scheme,
 		Path:   get_random_string,
 	}
 	http.HandleFunc("/"+get_random_string, func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
+		http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
 	})
 	fmt.Println(construct_new_url.String())
 
