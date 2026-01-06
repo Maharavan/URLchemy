@@ -1,43 +1,44 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 
 	"github.com/joho/godotenv"
 )
 
-var defaultScheme string = "http"
-var defaultHost string = "localhost:8000"
-
 const base62Digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-func get_time_stamp() int {
-	current_time := time.Now()
-	return int(current_time.UnixMilli())
+func generateRandomBytes() []byte {
+
+	b := make([]byte, 6)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(err)
+	}
+
+	return b
 }
 
 func base62Encoder() string {
-	number := get_time_stamp()
-	base62 := ""
+	number := generateRandomBytes()
 
-	for number > 0 {
-		remainder := number % 62
-		base62 = string(base62Digits[remainder]) + base62
-		number /= 62
+	for i := range number {
+		number[i] = base62Digits[int(number[i])%62]
 	}
-	return base62
+
+	return string(number)
 }
 
 func getHostNameandScheme() (string, string) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error while loading .env file")
-	}
+	var defaultScheme string = "http"
+	var defaultHost string = "localhost:8000"
+
+	godotenv.Load()
+
 	if hostname := os.Getenv("APP_HOST_NAME"); hostname != "" {
 		defaultHost = hostname
 	}
@@ -73,7 +74,6 @@ func main() {
 
 	get_random_string := base62Encoder()
 	host, scheme := getHostNameandScheme()
-	fmt.Println(host, scheme, get_random_string)
 	construct_new_url := url.URL{
 		Scheme: scheme,
 		Host:   host,
@@ -82,7 +82,7 @@ func main() {
 	http.HandleFunc("/"+get_random_string, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
 	})
-	fmt.Println(construct_new_url.String())
+	fmt.Println("Redirected URL:", construct_new_url.String())
 
 	if err := http.ListenAndServe(":8000", nil); err != nil {
 		panic(err)
