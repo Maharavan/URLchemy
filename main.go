@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -16,17 +16,18 @@ var defaultHost string = "localhost:8000"
 
 const base62Digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-func random_number_within_range(min, max int) int {
-	return min + rand.IntN(max-min+1)
+func get_time_stamp() int {
+	current_time := time.Now()
+	return int(current_time.UnixMilli())
 }
 
-func base62Encoder(min, max int) string {
-	number := random_number_within_range(min, max)
+func base62Encoder() string {
+	number := get_time_stamp()
 	base62 := ""
 
 	for number > 0 {
 		remainder := number % 62
-		base62 += string(base62Digits[remainder])
+		base62 = string(base62Digits[remainder]) + base62
 		number /= 62
 	}
 	return base62
@@ -70,7 +71,7 @@ func main() {
 	fmt.Println("Raw query: ", u.RawQuery)
 	fmt.Println("Fragment: ", u.Fragment)
 
-	get_random_string := base62Encoder(10000, 80000)
+	get_random_string := base62Encoder()
 	host, scheme := getHostNameandScheme()
 	fmt.Println(host, scheme, get_random_string)
 	construct_new_url := url.URL{
