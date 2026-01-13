@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 const base62Digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -20,9 +21,15 @@ type Payload struct {
 	URL string `json:"url"`
 }
 
+type RedisCache struct {
+	client *redis.Client
+}
+
 var (
 	inmemory = make(map[string]string)
 	mu       sync.RWMutex
+	cache    *RedisCache
+	ctx      = context.Background()
 )
 
 func generateRandomBytes() []byte {
@@ -68,8 +75,8 @@ func retrievelongurl(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("URL shortner failed due to ", r)
-			panic(r)
+			log.Println("URL shortner failed due to ", r)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	}()
 
@@ -88,19 +95,21 @@ func retrievelongurl(w http.ResponseWriter, r *http.Request) {
 
 	var get_random_string string
 
-	fmt.Printf("Type  %T", u)
-	fmt.Println("Current URL: ", u)
-	fmt.Println("Protocol: ", u.Scheme)
-	fmt.Println("Hostname: ", u.Hostname())
-	fmt.Println("Path: ", u.Path)
-	fmt.Println("Raw query: ", u.RawQuery)
-	fmt.Println("Fragment: ", u.Fragment)
+	log.Printf("Type  %T", u)
+	log.Println("Current URL: ", u)
+	log.Println("Protocol: ", u.Scheme)
+	log.Println("Hostname: ", u.Hostname())
+	log.Println("Path: ", u.Path)
+	log.Println("Raw query: ", u.RawQuery)
+	log.Println("Fragment: ", u.Fragment)
 	hostname, scheme := getHostNameandScheme()
 	for {
 		get_random_string = base62Encoder()
-		if _, ok := inmemory[get_random_string]; !ok {
+		if _, err := cache.client.Get(ctx, get_random_string).Result(); err != nil {
 			mu.Lock()
-			inmemory[get_random_string] = u.String()
+			if err := cache.client.Set(ctx, get_random_string, u.String(), 0).Err(); err != nil {
+				log.Fatal(err)
+			}
 			mu.Unlock()
 			break
 		}
@@ -126,19 +135,19 @@ func rerouter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid Request Method", http.StatusMethodNotAllowed)
 		return
 	}
-	fmt.Println(r.URL)
+	log.Println(r.URL)
 	random := strings.TrimPrefix(r.URL.Path, "/")
 	if random == "" {
-		http.Error(w, fmt.Sprintf("%v", inmemory), http.StatusNotFound)
+		http.Error(w, "Short code not found", http.StatusNotFound)
 		return
 	}
 
 	mu.RLock()
 
-	longurl, ok := inmemory[random]
+	longurl, err := cache.client.Get(ctx, random).Result()
 	mu.RUnlock()
 
-	if !ok {
+	if err != nil {
 		http.Error(w, "Invalid data", http.StatusNotFound)
 		return
 	}
@@ -147,8 +156,26 @@ func rerouter(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func redisconnection() {
+
+	cache = &RedisCache{client: redis.NewClient(&redis.Options{
+		Addr:     "redis-db:6379",
+		Password: "",
+		DB:       0,
+	})}
+
+	status, err := cache.client.Ping(ctx).Result()
+
+	if err != nil {
+		log.Fatal("Error connecting to redis", err)
+	}
+
+	log.Println("Connected to Redis:", status)
+}
+
 func main() {
 	godotenv.Load()
+	redisconnection()
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /longurl", retrievelongurl)
