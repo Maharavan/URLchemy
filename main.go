@@ -9,12 +9,14 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 )
 
 const base62Digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const shortCodeLength = 6
 
 type Payload struct {
 	URL string `json:"url"`
@@ -31,7 +33,7 @@ var (
 
 func generateRandomBytes() []byte {
 
-	b := make([]byte, 6)
+	b := make([]byte, shortCodeLength)
 	_, err := rand.Read(b)
 	if err != nil {
 		panic(err)
@@ -64,6 +66,15 @@ func getHostNameandScheme() (string, string) {
 	return defaultHost, defaultScheme
 }
 
+func getRedisAddress() string {
+	var redisLocalUrl string = "http://127.0.0.1:6379"
+
+	if host := os.Getenv("REDIS_ADDR"); host != "" {
+		redisLocalUrl = host
+	}
+
+	return redisLocalUrl
+}
 func retrievelongurl(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -86,6 +97,10 @@ func retrievelongurl(w http.ResponseWriter, r *http.Request) {
 
 	dummy_url := p.URL
 	u, err := url.Parse(dummy_url)
+	if u.Scheme == "" || u.Hostname() == "" {
+		http.Error(w, "Scheme/Host is missing", http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -102,8 +117,8 @@ func retrievelongurl(w http.ResponseWriter, r *http.Request) {
 	hostname, scheme := getHostNameandScheme()
 	for {
 		get_random_string = base62Encoder()
-		if _, err := cache.client.Get(ctx, get_random_string).Result(); err != nil {
-			if err := cache.client.Set(ctx, get_random_string, u.String(), 0).Err(); err != nil {
+		if _, err := cache.client.Get(ctx, get_random_string).Result(); err == redis.Nil {
+			if err := cache.client.Set(ctx, get_random_string, u.String(), 24*time.Hour).Err(); err != nil {
 				log.Fatal(err)
 			}
 			break
@@ -144,14 +159,14 @@ func rerouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, longurl, http.StatusMovedPermanently)
+	http.Redirect(w, r, longurl, http.StatusFound)
 
 }
 
 func redisconnection() {
 
 	cache = &RedisCache{client: redis.NewClient(&redis.Options{
-		Addr:     "redis-db:6379",
+		Addr:     getRedisAddress(),
 		Password: "",
 		DB:       0,
 	})}
