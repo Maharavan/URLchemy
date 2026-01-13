@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
@@ -26,10 +25,8 @@ type RedisCache struct {
 }
 
 var (
-	inmemory = make(map[string]string)
-	mu       sync.RWMutex
-	cache    *RedisCache
-	ctx      = context.Background()
+	cache *RedisCache
+	ctx   = context.Background()
 )
 
 func generateRandomBytes() []byte {
@@ -106,11 +103,9 @@ func retrievelongurl(w http.ResponseWriter, r *http.Request) {
 	for {
 		get_random_string = base62Encoder()
 		if _, err := cache.client.Get(ctx, get_random_string).Result(); err != nil {
-			mu.Lock()
 			if err := cache.client.Set(ctx, get_random_string, u.String(), 0).Err(); err != nil {
 				log.Fatal(err)
 			}
-			mu.Unlock()
 			break
 		}
 
@@ -142,10 +137,7 @@ func rerouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.RLock()
-
 	longurl, err := cache.client.Get(ctx, random).Result()
-	mu.RUnlock()
 
 	if err != nil {
 		http.Error(w, "Invalid data", http.StatusNotFound)
